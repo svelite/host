@@ -1,9 +1,10 @@
-import { readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { existsSync } from 'node:fs';
 
 export const createAdapter = (token) => {
     if(!existsSync('./data/' + token + '/db.json')) {
-        throw new Error('database not esists. create new database first (/new)')
+        mkdirSync('./data/' + token, {recursive: true})
+        writeFileSync('./data/' + token + '/db.json', '{}')
     }
     let db = {}
 
