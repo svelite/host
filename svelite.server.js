@@ -59,20 +59,24 @@ function dbProvider(prefix) {
 }
 
 function runScript(command, args) {
-    console.log('runScript', command, args)
-    const child = spawn(command, args)
+    return new Promise(resolve => {
+        console.log('runScript', command, args)
 
-    child.stdout.on('data', (data) => {
-        console.log(`stdout: ${data}`);
-    });
+        const child = spawn(command, args)
 
-    child.stderr.on('data', (data) => {
-        console.error(`stderr: ${data}`);
-    });
+        child.stdout.on('data', (data) => {
+            console.log(command + `: ${data}`);
+        });
 
-    child.on('close', (code) => {
-        console.log(`child process exited with code ${code}`);
-    });
+        child.stderr.on('data', (data) => {
+            console.error(command + `(err): ${data}`);
+        });
+
+        child.on('close', (code) => {
+            console.log(`child process exited with code ${code}`);
+            resolve()
+        });
+    })
 }
 
 
@@ -135,7 +139,7 @@ export default {
         },
         'deploy': {
             async POST(req) {
-                return new Promise(resolve => {
+                return new Promise(async resolve => {
 
                     const file_id = req.body.id
                     const name = req.body.name
@@ -208,26 +212,18 @@ export default {
 server {
     server_name ${name}.cms.hadiahmadi.dev;
     location / {
-        proxy_pass http://localhost:${port}
+        proxy_pass http://localhost:${port};
     }
 }
 `    
                         }
 
-                        // let nginxConfig = projects.map((project) => {
-                        //     const config = JSON.parse(fs.readFileSync('./sites/' + project + '/config.json'));
-                               
-                        //     return generateNginxConfig(config)
-                        // })
-
-
                         const nginxConfig = readFileSync('/etc/nginx/sites-available/svelite.conf', 'utf-8')
 
                         writeFileSync('/etc/nginx/sites-available/svelite.conf', generateNginxConfig({port, name}) + nginxConfig)
 
-                        runScript('npm', ['install'])
-                        runScript('certbot', ['--nginx', '-d', name + '.cms.hadiahmadi.dev'])
-                        
+                        await runScript('./start.sh', ['./sites/' + name, port, name])
+
                     }
 
                     const file = readFileSync('./data/files/' + file_id)
@@ -299,14 +295,50 @@ server {
         },
         run: {
             async POST({ body }) {
-                const { name, deployment_id = null } = body
+                const { project_id, deploymentId = null } = body
 
-                runScript('./run.sh', ['./sites/' + name])
+                const config = JSON.parse(readFileSync('./sites/' + project_id + '/config.json', 'utf-8'))
+
+
+                if(deploymentId) {
+                    config.active_deployment = deploymentId
+
+                    writeFileSync('./sites/' + project_id + '/config.json', JSON.stringify(config))
+                }
+
+                runScript('./run.sh', ['./sites/' + project_id])
 
                 return {
                     body: {
-
+                        url: `https://${config.name}.cms.hadiahmadi.dev`
                     }
+                }
+            }
+        },
+        'projects': {
+            async GET() {
+                const projects = readdirSync('./sites')      
+
+                return {
+                    body: projects.map(x => ({
+                        id: x, 
+                        ...JSON.parse(readFileSync('./sites/' + x + '/config.json', 'utf-8'))
+                    }))
+                }
+            }
+        },
+        'projects/:id': {
+            async GET({params}) {
+                const id = params.id
+
+                const config = JSON.parse(readFileSync('./sites/' + id + '/config.json', 'utf-8'))
+
+                const deployments = readdirSync('./sites/' + id).filter(x => {
+                    return !x.includes('config.json') && !x.includes('package.json') && !x.includes('index.js')
+                })
+
+                return {
+                    body: {id, ...config, deployments}
                 }
             }
         },
