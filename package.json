@@ -5,7 +5,9 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "svelite",
+    "build": "svelite build",
+    "zip": "npm run build && zip -r build.zip build"
   },
   "keywords": [],
   "author": "",
@@ -13,7 +15,7 @@
   "dependencies": {
     "busboy": "^1.6.0",
     "nanoid": "^5.0.6",
-    "svelitecms": "^0.0.6-next.35",
+    "svelitecms": "^0.0.6-next.39",
     "svelte": "^5.0.0-next.64",
     "yauzl": "^3.1.0"
   }
