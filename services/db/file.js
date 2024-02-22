@@ -28,7 +28,7 @@ export const createAdapter = (token) => {
     }, 2000)
 
     return {
-        insert(collection, data) {
+        async insert(collection, data) {
             if (!db[collection]) {
                 db[collection] = [];
             }
@@ -37,7 +37,7 @@ export const createAdapter = (token) => {
             return data;
         },
 
-        query(collection, {pagination = {page: 1, perPage: 0}, filters = []}) {
+        async query(collection, {pagination = {page: 1, perPage: 0}, filters = []}) {
             if (!db[collection]) {
                 return {data:[], total: 0, page: 1, perPage: 0};
             }
@@ -55,7 +55,7 @@ export const createAdapter = (token) => {
             }
         },
 
-        update(collection, id, data) {
+        async update(collection, id, data) {
             if (!db[collection]) {
                 return null;
             }
@@ -68,7 +68,7 @@ export const createAdapter = (token) => {
             return null;
         },
 
-        remove(collection, id) {
+        async remove(collection, id) {
             if (!db[collection]) {
                 return null;
             }

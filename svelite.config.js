@@ -13,6 +13,9 @@ export default {
         },
         {
             slug: '/:project',
+            layout: {
+                name: 'AdminLayout'
+            },
             modules: [
                 {name: 'ProjectDetail', params: {id: ':project'}},
                 {name: 'DeploymentList', params: {id: ':project'}}

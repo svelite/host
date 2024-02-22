@@ -1,15 +1,7 @@
 <script context="module">
     export async function load({params, api}) {
-        // const project = await api('/projects/' + params.id).get({})
-        const project = {
-            id: 'abcsoiwd',
-            name: 'project-name',
-            active_deployment: 'soifdjfd',
-            deployments: [
-                'soifdjfd',
-                'asdfsoij'
-            ]
-        }
+        const project = await api('/api/projects/' + params.id).get({})
+        
 
         return {
             project

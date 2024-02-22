@@ -1,17 +1,12 @@
-import { createDb } from "./services/db/index.js"
-import { createAdapter } from './services/db/file.js'
-import { generateApiKey } from "./services/auth/index.js"
-import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'fs'
-import Busboy from "busboy"
-import yauzl from 'yauzl'
-import fs from 'fs'
-import path from 'path'
+import { generateApiKey, login } from "./services/auth/index.js"
+import { readFileSync } from 'fs'
 
-import { getId } from "./services/db/helpers.js"
-import { spawn } from "child_process"
+import { activateDeployment, deployProject } from "./services/project/deploy.js"
+import { runProject } from "./services/project/run.js"
+import { getProject, getProjects } from "./services/project/crud.js"
 
-const adapter = createAdapter('default')
-const db = createDb(adapter)
+import db from './services/db/index.js'
+import { uploadFile } from "./services/file.js"
 
 function dbProvider(prefix) {
     return {
@@ -58,28 +53,6 @@ function dbProvider(prefix) {
     }
 }
 
-function runScript(command, args) {
-    return new Promise(resolve => {
-        console.log('runScript', command, args)
-
-        const child = spawn(command, args)
-
-        child.stdout.on('data', (data) => {
-            console.log(command + `: ${data}`);
-        });
-
-        child.stderr.on('data', (data) => {
-            console.error(command + `(err): ${data}`);
-        });
-
-        child.on('close', (code) => {
-            console.log(`child process exited with code ${code}`);
-            resolve()
-        });
-    })
-}
-
-
 const { PORT = 5173 } = process.env
 
 export default {
@@ -89,32 +62,16 @@ export default {
     },
     routes: {
         ...dbProvider('db'),
-        'upload': {
+        'api/upload': {
             async POST(req) {
-                let body = []
-                return new Promise(resolve => {
-                    console.log('upload')
-                    req.on('data', (chunk) => {
-                        body.push(chunk)
-                    })
+                const result = await uploadFile(req)
 
-                    req.on('end', () => {
-                        const file = Buffer.concat(body)
-
-                        const name = getId()
-
-                        if (!existsSync('./data/files')) {
-                            mkdirSync('./data/files');
-                        }
-
-                        writeFileSync(`./data/files/` + name, file)
-                        resolve({
-                            body: {
-                                id: name
-                            }
-                        })
-                    })
-                })
+                console.log(result)
+                return {
+                    body: result,
+                    status: 200,
+                    headers: {}
+                }
             }
         },
         'file/:id': {
@@ -126,7 +83,7 @@ export default {
                 }
             }
         },
-        'token/new': {
+        'api/token/new': {
             async POST(req) {
                 return {
                     body: {
@@ -137,223 +94,75 @@ export default {
                 }
             }
         },
-        'deploy': {
+        'api/deploy': {
             async POST(req) {
-                return new Promise(async resolve => {
+                const { name, fileId, projectId } = req.body
 
-                    const file_id = req.body.id
-                    const name = req.body.name
+                // TODO: Check if name has conflict
 
-                    // TODO: if name has conflict, create new name
-                    const deploymentId = getId()
-                    let projectId = req.body.project_id
+                const deployResponse = await deployProject({ fileId, name, projectId })
 
-
-                    // first site
-                    if (!existsSync('./sites/')) {
-                        mkdirSync('./sites')
-                    }
-
-
-                    // first deployment in this site
-                    if (!projectId) {
-
-                        const projectsPath = './sites';
-                        const projects = fs.readdirSync(projectsPath);
-
-                        function getNextAvailablePort() {
-                            let port = 3100;
-
-                            while (true) {
-                                if (!isPortInUse(port)) {
-                                    return port;
-                                }
-                                port++;
-                            }
-                        }
-
-                        function isPortInUse(port) {
-                            // Check if the port is in use based on your project configuration
-
-                            for (const project of projects) {
-                                const configPath = path.join(projectsPath, project, 'config.json');
-                                if (fs.existsSync(configPath)) {
-                                    const config = JSON.parse(fs.readFileSync(configPath));
-                                    if (config.port === port) {
-                                        return true;
-                                    }
-                                }
-                            }
-
-                            return false;
-                        }
-
-                        const port = getNextAvailablePort();
-
-
-                        projectId = getId()
-
-                        mkdirSync('./sites/' + projectId)
-                        cpSync('./files/site/package.json', './sites/' + projectId + '/package.json')
-                        cpSync('./files/site/index.js', './sites/' + projectId + '/index.js')
-
-                        writeFileSync('./sites/' + projectId + '/config.json', JSON.stringify({
-                            name,
-                            active_deployment: deploymentId,
-                            port
-                        }))
-
-                        function generateNginxConfig(config) {
-                            const port = config.port
-                            const name = config.name
-
-                            return `
-# project_id=${projectId}
-server {
-    server_name ${name}.cms.hadiahmadi.dev;
-    location / {
-        proxy_pass http://localhost:${port};
-    }
-}
-`    
-                        }
-
-                        const nginxConfig = readFileSync('/etc/nginx/sites-available/svelite.conf', 'utf-8')
-
-                        writeFileSync('/etc/nginx/sites-available/svelite.conf', generateNginxConfig({port, name}) + nginxConfig)
-
-                        await runScript('./start.sh', ['./sites/' + name, port, name])
-
-                    }
-
-                    const file = readFileSync('./data/files/' + file_id)
-                    if (!file) throw new Error('No file');
-
-                    const folder = './sites/' + projectId
-                    mkdirSync(folder + '/' + deploymentId)
-
-                    yauzl.open('./data/files/' + file_id, { lazyEntries: true, autoClose: true }, (err, zip) => {
-                        zip.readEntry();
-
-
-                        zip.on('entry', (entry) => {
-                            console.log('entry: ', entry.fileName)
-
-                            if (entry.fileName.endsWith('/') && entry.fileName !== '/') {
-                                // Directory file names end with '/'
-                                // fs.mkdirSync(path.join(folder, entry.fileName), { recursive: true });
-                                zip.readEntry();
-                            } else {
-                                zip.openReadStream(entry, (err, readStream) => {
-                                    console.log('err: ', err)
-                                    if (err) {
-                                        reject(err);
-                                        return;
-                                    }
-
-                                    // Ensure parent directory exists
-                                    fs.mkdirSync(path.dirname(path.join(folder, entry.fileName.replace('build/', deploymentId + '/'))), { recursive: true });
-
-                                    const filename = entry.fileName.replace('build/', deploymentId + '/')
-                                    console.log('name: ', filename)
-                                    // Extract file
-                                    readStream.pipe(fs.createWriteStream(path.join(folder, entry.fileName.replace('build/', deploymentId + '/'))));
-
-
-
-
-
-                                    readStream.on('end', () => {
-
-                                        console.log('zip.readEntry end')
-                                        zip.readEntry();
-                                    });
-                                });
-                            }
-                        })
-
-                        zip.on('close', () => {
-
-                            // rmSync(path.join(folder, deploymentId, 'index.js'))
-                            // rmSync(path.join(folder, deploymentId, 'package.json'))
-                            // files extracted.
-                            // runScript('./run.sh', [folder, deploymentId]);
-
-                            rmSync('./data/files/' + file_id)
-                            resolve({
-                                body: {
-                                    id: deploymentId,
-                                    name
-                                },
-                                status: 200,
-                                headers: {}
-                            })
-                        })
-                    })
-                })
+                return {
+                    body: deployResponse
+                }
             }
         },
-        run: {
+        'api/rollback': {
+            async POST(req) {
+                const {projectId, deploymentId} = req.body;
+
+                await activateDeployment({projectId, deploymentId})
+                return {
+                    body: {success: true}
+                }
+            }
+        },
+        'api/run': {
             async POST({ body }) {
-                const { project_id, deploymentId = null } = body
+                const { projectId, deploymentId = null } = body
 
-                const config = JSON.parse(readFileSync('./sites/' + project_id + '/config.json', 'utf-8'))
-
-
-                if(deploymentId) {
-                    config.active_deployment = deploymentId
-
-                    writeFileSync('./sites/' + project_id + '/config.json', JSON.stringify(config))
-                }
-
-                runScript('./run.sh', ['./sites/' + project_id])
+                const runResult = runProject({ projectId, deploymentId })
 
                 return {
-                    body: {
-                        url: `https://${config.name}.cms.hadiahmadi.dev`
-                    }
+                    body: runResult
                 }
             }
         },
-        'projects': {
+        'api/projects': {
             async GET() {
-                const projects = readdirSync('./sites')      
+                const projects = await getProjects()      
 
                 return {
-                    body: projects.map(x => ({
-                        id: x, 
-                        ...JSON.parse(readFileSync('./sites/' + x + '/config.json', 'utf-8'))
-                    }))
+                    body: projects
                 }
             }
         },
-        'projects/:id': {
-            async GET({params}) {
-                const id = params.id
-
-                const config = JSON.parse(readFileSync('./sites/' + id + '/config.json', 'utf-8'))
-
-                const deployments = readdirSync('./sites/' + id).filter(x => {
-                    return !x.includes('config.json') && !x.includes('package.json') && !x.includes('index.js')
-                })
+        'api/user': {
+            async GET({params, headers}) {
+                console.log(headers)
 
                 return {
-                    body: {id, ...config, deployments}
+                    body: {}
                 }
             }
         },
-        test: {
-            async GET(req) {
+        'api/projects/:id': {
+            async GET({ params }) {
+                const project = await getProject({id: params.id})
+
                 return {
-                    body: { message: "Hello World", data: await req.db('expenses').query({}) },
+                    body: project
+                }
+            }
+        },
+        'api/login': {
+            async POST(req) {
+                return {
+                    body: await login(req.body),
                     status: 200,
                     headers: {}
                 }
             }
-        },
-        createSite(req) {
-
         }
-        /* ... */
     }
 }

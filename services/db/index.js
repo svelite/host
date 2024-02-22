@@ -1,6 +1,6 @@
-import { getId } from './helpers.js';
+import { getId } from '../helpers.js';
+import {createAdapter} from './file.js'
 
-console.log('GETID: ', getId)
 
 export function createDb(adapter) {
 	return (collectionName) => {
@@ -32,3 +32,9 @@ export function createDb(adapter) {
 		};
 	};
 }
+
+const adapter = createAdapter('default')
+
+const db = createDb(adapter)
+
+export default db;

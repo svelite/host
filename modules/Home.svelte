@@ -15,18 +15,17 @@
 
     async function onSubmit(e) {
         e.preventDefault();
-        const fd = new FormData()
-        fd.set('', request.files[0])
 
+        console.log(request.files[0])
         // upload file 
-        const res = await fetch('/upload', {
+        const res = await fetch('/api/upload', {
             method: 'POST',
             body: request.files[0]
         }).then(x => x.json())
 
-        const file_id = res.id
+        const fileId = res.id
         // Deploy 
-        const res2 = await data.api('/deploy').post({id: file_id, name: request.name})        
+        const res2 = await data.api('/api/deploy').post({fileId, name: request.name})        
 
         console.log(res2)
     }
