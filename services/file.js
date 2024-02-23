@@ -15,7 +15,6 @@ export function uploadFile(req) {
 
             writeFileSync(`./data/files/` + id, file)
             
-            console.log('uploaded: ', id)
             resolve({
                 id
             })

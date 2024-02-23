@@ -1,12 +1,14 @@
 import { generateApiKey, login } from "./services/auth/index.js"
 import { readFileSync } from 'fs'
+import pm2 from 'pm2'
 
 import { activateDeployment, deployProject } from "./services/project/deploy.js"
-import { runProject } from "./services/project/run.js"
+import { startProject, statrProject, stopProject } from "./services/project/run.js"
 import { getProject, getProjects } from "./services/project/crud.js"
 
 import db from './services/db/index.js'
 import { uploadFile } from "./services/file.js"
+import { setup } from "./services/project/setup.js"
 
 function dbProvider(prefix) {
     return {
@@ -55,6 +57,32 @@ function dbProvider(prefix) {
 
 const { PORT = 5173 } = process.env
 
+pm2.list((res, list) => {
+    for (let item of list) {
+        if (item.name.startsWith('svelite-')) {
+            pm2.delete(item.name)
+        }
+    }
+})
+
+db('projects').query({})
+    .then(res => res.data.filter(x => !!x.active_deployment))
+    .then(projects => {
+
+        for (let project of projects) {
+            pm2.start({
+                script: './index.js',
+                cwd: `./sites/${project.id}`,
+                name: `svelite-${project.id}`,
+                env: {
+                    'DEPLOYMENT_ID': project.active_deployment,
+                    'PORT': project.port,
+                }
+            })
+        }
+    })
+
+
 export default {
     db: {
         base_url: 'http://localhost:' + PORT,
@@ -66,7 +94,6 @@ export default {
             async POST(req) {
                 const result = await uploadFile(req)
 
-                console.log(result)
                 return {
                     body: result,
                     status: 200,
@@ -109,28 +136,36 @@ export default {
         },
         'api/rollback': {
             async POST(req) {
-                const {projectId, deploymentId} = req.body;
+                const { projectId, deploymentId } = req.body;
 
-                await activateDeployment({projectId, deploymentId})
+                await activateDeployment({ projectId, deploymentId })
                 return {
-                    body: {success: true}
+                    body: { success: true }
                 }
             }
         },
-        'api/run': {
+        'api/start': {
             async POST({ body }) {
                 const { projectId, deploymentId = null } = body
 
-                const runResult = runProject({ projectId, deploymentId })
+                const runResult = startProject({ projectId, deploymentId })
 
                 return {
                     body: runResult
                 }
             }
         },
+        'api/stop': {
+            async POST({ body }) {
+                const { projectId } = body
+                const stopResult = await stopProject({ projectId })
+
+                return { body: stopResult }
+            }
+        },
         'api/projects': {
             async GET() {
-                const projects = await getProjects()      
+                const projects = await getProjects()
 
                 return {
                     body: projects
@@ -138,8 +173,8 @@ export default {
             }
         },
         'api/user': {
-            async GET({params, headers}) {
-                console.log(headers)
+            async GET({ params, headers }) {
+                // TODO: Get User from token (cookie)
 
                 return {
                     body: {}
@@ -148,7 +183,7 @@ export default {
         },
         'api/projects/:id': {
             async GET({ params }) {
-                const project = await getProject({id: params.id})
+                const project = await getProject({ id: params.id })
 
                 return {
                     body: project
@@ -161,6 +196,27 @@ export default {
                     body: await login(req.body),
                     status: 200,
                     headers: {}
+                }
+            }
+        },
+        'api/setup': {
+            async POST(req) {
+                const result = await setup(req.body)
+
+                // return redirect('/')
+                return {
+                    body: { result }
+                }
+            }
+
+        },
+        'api/initialized': {
+            async GET(req) {
+                const initialized = await db('users').query({}).then(res => res.data.length > 0)
+
+                return {
+
+                    body: { initialized }
                 }
             }
         }

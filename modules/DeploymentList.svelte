@@ -34,7 +34,7 @@
 </script>
 
 <script>
-    let { data } = $props();
+    let { data, reload } = $props();
 
     let fileUploadEl = $state();
 
@@ -44,6 +44,7 @@
         await data
             .api("/api/rollback")
             .post({ projectId: data.project.id, deploymentId: id });
+        reload()
     }
 
     function openDeploy() {
@@ -59,6 +60,8 @@
             name: data.project.name,
             projectId: data.project.id,
         });
+
+        await reload()
 
         loading = false;
     }

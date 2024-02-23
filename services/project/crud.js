@@ -30,6 +30,5 @@ export async function getProject({id}) {
 export async function getProjects() {
     const projects = await db('projects').query({})
 
-    console.log(projects)
     return projects.data
 }

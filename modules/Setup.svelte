@@ -1,10 +1,15 @@
 <script context="module">
-    export async function load({api}) {
+    export async function load({api, reload, redirect}) {
+        const {initialized} = await api('/api/initialized').get({})
+
+        if(initialized) {
+            return redirect('/')
+        }
         return {
             async setup(request) {
                 api('/api/setup').post(request)
 
-                return true
+                location.reload()
             }
         }
     }

@@ -13,6 +13,7 @@
 </script>
 
 project detail
+<h1>{data.project.name}</h1>
 <pre>
 {JSON.stringify(data.project, null, 2)}
 </pre>

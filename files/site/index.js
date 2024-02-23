@@ -13,7 +13,7 @@ app.use(express.json())
 app.use('/', async (req, res) => {
 
     if(!render) {
-        await import(`./${id}/server/server.mjs`).then(module => {
+        await import(`./${id}/server/server.js`).then(module => {
             render = module.render
         })
     }

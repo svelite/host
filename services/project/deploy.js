@@ -1,10 +1,12 @@
 import { getId } from "../helpers.js";
+import pm2 from 'pm2'
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'fs'
 import yauzl from 'yauzl'
 import fs from 'fs'
 import path from 'path'
 import db from '../db/index.js'
 import { runScript } from "../helpers.js";
+import { startProject } from "./run.js";
 
 
 function generateNginxConfig(config) {
@@ -22,7 +24,7 @@ server {
 }
 
 
-async function createProject({ name, deploymentId }) {
+async function createProject({ name }) {
     // const projectId = getId()
     const projects = await db('projects').query({});
 
@@ -63,13 +65,18 @@ async function createProject({ name, deploymentId }) {
     const projectNginxConfigPath = `/etc/nginx/sites-available/svelite/${project.id}.conf`
     writeFileSync(projectNginxConfigPath, generateNginxConfig(project))
 
-    await runScript('./start.sh', ['./sites/' + project.id, project.port, name])
-    return project.id
+    // await runScript('./install.sh', ['./sites/' + project.id, project.port, project.id])
+    await runScript('cd', ['./sites/' + project.id])
+    
+    await runScript('npm', ['install'])
+
+    return project
 }
 
 export async function activateDeployment({projectId, deploymentId}) {
     await db('projects').update(projectId, {active_deployment: deploymentId})
 
+    await startProject({projectId, deploymentId})
 }
 
 async function createDeployment({projectId, fileId}) {
@@ -95,16 +102,58 @@ async function createDeployment({projectId, fileId}) {
 export async function deployProject({ fileId, name, projectId }) {
     // first deployment in this site
     if (!projectId) {
-        projectId = await createProject({ name })
+        let project = await createProject({ name })
+
+        const deployment = await createDeployment({projectId, fileId})
+
+        pm2.start({
+            script: 'index.js',
+            cwd: './sites/' + project.id,
+            name: 'svelite-' + project.id,
+            env: {
+                'DEPLOYMENT_ID': deployment.id,
+                // TODO
+                // 'PORT': ,
+
+            }
+        })
+        
+        return {
+            id: deployment.id,
+            name
+        }
+    } else {
+        let project = await db('projects').query({
+            filters: [
+                {
+                    field: 'id',
+                    operator: '=',
+                    value: projectId
+                }
+            ]
+        }).then(res => res.data[0])
+
+        const deployment = await createDeployment({projectId, fileId})
+
+        pm2.delete('svelite-' + project.id, () => {
+
+            pm2.start({
+                script: 'index.js',
+                cwd: './sites/' + project.id,
+                name: 'svelite-' + project.id,
+                env: {
+                    'DEPLOYMENT_ID': deployment.id,
+                    'PORT': project.port,
+                }
+            })
+        })
+
+        return {
+            id: deployment.id,
+            name
+        }
     }
 
-    const deployment = await createDeployment({projectId, fileId})
-
-    
-    return {
-        id: deployment.id,
-        name
-    }
 }
 
 async function extractProject(zipFilePath, folder) {

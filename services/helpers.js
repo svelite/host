@@ -8,12 +8,12 @@ export const getId = customAlphabet(alphabet, 8);
 
 export function runScript(command, args) {
     return new Promise(resolve => {
-        console.log('runScript', command, args)
+        console.log('runScript:', command, args)
 
         const child = spawn(command, args)
 
         child.stdout.on('data', (data) => {
-            console.log(command + `: ${data}`);
+            console.log(`>>> ${data}`);
         });
 
         child.stderr.on('data', (data) => {

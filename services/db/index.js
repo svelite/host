@@ -13,7 +13,6 @@ export function createDb(adapter) {
                 })
 			},
 			async insert(data) {
-				console.log(getId)
                 data.id ??= getId();
                 data.createdAt = new Date().valueOf()
                 data.updatedAt = 0
