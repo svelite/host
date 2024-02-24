@@ -57,30 +57,29 @@ function dbProvider(prefix) {
 
 const { PORT = 5173 } = process.env
 
-pm2.list((res, list) => {
-    for (let item of list) {
-        if (item.name.startsWith('svelite-')) {
-            pm2.delete(item.name)
-        }
-    }
-})
+// db('projects').query({})
+//     .then(res => res.data.filter(x => !!x.active_deployment))
+//     .then(projects => {
 
-db('projects').query({})
-    .then(res => res.data.filter(x => !!x.active_deployment))
-    .then(projects => {
+//         for (let project of projects) {
+//             pm2.delete(`svelite-${project.id}`, () => {
 
-        for (let project of projects) {
-            pm2.start({
-                script: './index.js',
-                cwd: `./sites/${project.id}`,
-                name: `svelite-${project.id}`,
-                env: {
-                    'DEPLOYMENT_ID': project.active_deployment,
-                    'PORT': project.port,
-                }
-            })
-        }
-    })
+//                 pm2.start({
+//                     script: './index.js',
+//                     cwd: `./sites/${project.id}`,
+//                     name: `svelite-${project.id}`,
+//                     env: {
+//                         'DEPLOYMENT_ID': project.active_deployment,
+//                         'PORT': project.port,
+//                     }
+//                 }, () => {
+//                     pm2.dump()
+//                 })
+
+//             })
+
+//         }
+//     })
 
 
 export default {

@@ -7,6 +7,7 @@ import path from 'path'
 import db from '../db/index.js'
 import { runScript } from "../helpers.js";
 import { startProject } from "./run.js";
+import { indexJS, packageJSON } from "./files.js";
 
 
 function generateNginxConfig(config) {
@@ -59,16 +60,14 @@ async function createProject({ name }) {
 
     // copy files and initialize project
     mkdirSync('./sites/' + project.id)
-    cpSync('./files/site/package.json', './sites/' + project.id + '/package.json')
-    cpSync('./files/site/index.js', './sites/' + project.id + '/index.js')
+    writeFileSync('./sites/' + project.id + '/package.json', packageJSON)
+    writeFileSync('./sites/' + project.id + '/index.js', indexJS)
 
     const projectNginxConfigPath = `/etc/nginx/sites-available/svelite/${project.id}.conf`
     writeFileSync(projectNginxConfigPath, generateNginxConfig(project))
 
-    // await runScript('./install.sh', ['./sites/' + project.id, project.port, project.id])
-    await runScript('cd', ['./sites/' + project.id])
-    
-    await runScript('npm', ['install'])
+    await runScript('./install.sh', ['./sites/' + project.id])
+    // await runScript('cd', ['./sites/' + project.id])    
 
     return project
 }
@@ -76,7 +75,7 @@ async function createProject({ name }) {
 export async function activateDeployment({projectId, deploymentId}) {
     await db('projects').update(projectId, {active_deployment: deploymentId})
 
-    await startProject({projectId, deploymentId})
+    // await startProject({projectId, deploymentId})
 }
 
 async function createDeployment({projectId, fileId}) {
@@ -94,6 +93,7 @@ async function createDeployment({projectId, fileId}) {
     await extractProject(filePath, folder)
     await activateDeployment({projectId, deploymentId: deployment.id})
 
+
     rmSync(filePath)
 
     return deployment
@@ -104,7 +104,7 @@ export async function deployProject({ fileId, name, projectId }) {
     if (!projectId) {
         let project = await createProject({ name })
 
-        const deployment = await createDeployment({projectId, fileId})
+        const deployment = await createDeployment({projectId: project.id, fileId})
 
         pm2.start({
             script: 'index.js',
@@ -113,9 +113,11 @@ export async function deployProject({ fileId, name, projectId }) {
             env: {
                 'DEPLOYMENT_ID': deployment.id,
                 // TODO
-                // 'PORT': ,
+                'PORT': project.port,
 
             }
+        }, () => {
+            pm2.dump()
         })
         
         return {
@@ -145,7 +147,10 @@ export async function deployProject({ fileId, name, projectId }) {
                     'DEPLOYMENT_ID': deployment.id,
                     'PORT': project.port,
                 }
+            }, () => {
+                pm2.dump()
             })
+
         })
 
         return {

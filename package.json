@@ -16,7 +16,7 @@
     "busboy": "^1.6.0",
     "nanoid": "^5.0.6",
     "pm2": "^5.3.1",
-    "svelitecms": "file:../svelite",
+    "svelitecms": "^0.0.6-next.50",
     "svelte": "^5.0.0-next.64",
     "yauzl": "^3.1.0"
   }

@@ -32,6 +32,15 @@ export default {
                 {name: 'Setup'}
             ]
         },
+        {
+            slug: '/tokens',
+            layout: {
+                name: 'AdminLayout'
+            },
+            modules: [
+                {name: 'Tokens'}
+            ]
+        }
     ],
     modules: {
         Home: import('./modules/Home.svelte'),
@@ -40,6 +49,7 @@ export default {
         DeploymentList: import('./modules/DeploymentList.svelte'),
         ProjectList: import('./modules/ProjectList.svelte'),
         PageHeader: import('./modules/PageHeader.svelte'),
+        Tokens: import('./modules/Tokens.svelte'),
         // module definitions
     },
     layouts: {

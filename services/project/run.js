@@ -23,11 +23,36 @@ export async function startProject({projectId, deploymentId}) {
 
 
     pm2.connect(() => {
-        pm2.restart(`svelite-${projectId}`)
-    })
-    
-    // runScript('./start.sh', ['./sites/' + projectId, project.active_deployment, project.port])
+        pm2.describe('svelite-' + projectId, (err, desc) => {
+            if(err || !desc.length) {
+                pm2.start({
+                    script: 'index.js',
+                    cwd: './sites/' + projectId,
+                    name: 'svelite-' + projectId,
+                    env: {
+                        PORT: project.port,
+                        DEPLOYMENT_ID: project.active_deployment
+                    }
+                }, () => {
+                    pm2.dump()
+                })
 
+            } else {
+                pm2.restart({
+                    script: 'index.js',
+                    cwd: './sites/' + projectId,
+                    name: 'svelite-' + projectId,
+                    env: {
+                        PORT: project.port,
+                        DEPLOYMENT_ID: project.active_deployment
+                    }
+                }, () => {
+                    pm2.dump()
+                })
+            }
+        })
+    })
+  
     return {
         url: `https://${project.name}.cms.hadiahmadi.dev`
     }
